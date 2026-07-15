@@ -32,7 +32,19 @@ export interface UseBridgeSocketOptions {
   onMessage: (msg: BridgeIncoming) => void;
 }
 
-export function useBridgeSocket({ bridgeCfg, platformName = 'web', sessionKey, projectName, onMessage }: UseBridgeSocketOptions) {
+function webBridgePlatformName() {
+  const storageKey = 'cc-connect-web-bridge-client-id';
+  let clientId = sessionStorage.getItem(storageKey);
+  if (!clientId) {
+    clientId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    sessionStorage.setItem(storageKey, clientId);
+  }
+  return `web-${clientId}`;
+}
+
+export function useBridgeSocket({ bridgeCfg, platformName, sessionKey, projectName, onMessage }: UseBridgeSocketOptions) {
+  const platformNameRef = useRef(platformName || webBridgePlatformName());
+  const registeredPlatform = platformNameRef.current;
   const wsRef = useRef<WebSocket | null>(null);
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
@@ -94,7 +106,7 @@ export function useBridgeSocket({ bridgeCfg, platformName = 'web', sessionKey, p
         setStatus('registering');
         ws.send(JSON.stringify({
           type: 'register',
-          platform: platformName,
+          platform: registeredPlatform,
           capabilities: ['text', 'card', 'buttons', 'typing', 'update_message', 'preview', 'reconstruct_reply'],
           metadata: { version: '1.0.0', description: 'Web Admin Dashboard' },
         }));
@@ -142,7 +154,7 @@ export function useBridgeSocket({ bridgeCfg, platformName = 'web', sessionKey, p
       }
       setStatus('disconnected');
     };
-  }, [bridgeCfg, platformName, send]);
+  }, [bridgeCfg, registeredPlatform, send]);
 
   return { status, send, sendMessage, sendCardAction, sendPreviewAck };
 }
