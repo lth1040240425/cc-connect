@@ -538,6 +538,17 @@ export default function ChatView() {
     messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, typing]);
 
+  useEffect(() => {
+    if (!expandedTimestampId || !window.matchMedia('(max-width: 767px)').matches) return;
+    const closeTimestamp = (event: PointerEvent) => {
+      if (!(event.target as HTMLElement).closest('.cc-message-entry')) {
+        setExpandedTimestampId(null);
+      }
+    };
+    document.addEventListener('pointerdown', closeTimestamp);
+    return () => document.removeEventListener('pointerdown', closeTimestamp);
+  }, [expandedTimestampId]);
+
   // Send message
   const handleImageSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []).filter((file) => file.type.startsWith('image/'));
