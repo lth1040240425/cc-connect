@@ -639,7 +639,7 @@ export default function ChatView() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto py-6 space-y-5">
+      <div className="cc-chat-messages flex-1 min-w-0 overflow-y-auto overflow-x-hidden py-6 space-y-5">
         {messages.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
             <div className="w-16 h-16 rounded-2xl bg-accent/10 flex items-center justify-center mb-4">

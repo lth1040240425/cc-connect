@@ -125,4 +125,14 @@ html {
   .cc-chat-view {
     height: calc(100vh - 1.5rem);
   }
+
+  .cc-chat-messages .prose,
+  .cc-chat-messages .prose p,
+  .cc-chat-messages .prose li {
+    overflow-wrap: anywhere;
+  }
+
+  .cc-chat-messages .prose pre {
+    max-width: 100%;
+  }
 }
