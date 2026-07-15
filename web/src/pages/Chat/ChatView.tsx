@@ -120,6 +120,13 @@ function parseListItemText(text: string): { cmd: string; desc: string } {
   return { cmd: text, desc: '' };
 }
 
+function formatFullTimestamp(timestamp?: string): string {
+  const date = timestamp ? new Date(timestamp) : new Date();
+  if (Number.isNaN(date.getTime())) return timestamp || '';
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
 function InlineMd({ text }: { text: string }) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return (
@@ -302,6 +309,7 @@ export default function ChatView() {
   const [sending, setSending] = useState(false);
   const [taskRunning, setTaskRunning] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [expandedTimestampId, setExpandedTimestampId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState(false);
   const [bridgeCfg, setBridgeCfg] = useState<BridgeConfig | null>(null);
@@ -388,6 +396,7 @@ export default function ChatView() {
     setDrawerOpen(false);
     setLoading(true);
     setUserPickedSession(true);
+    setExpandedTimestampId(null);
     try {
       const detail = await getSession(projectName, s.id, 200);
       setCurrentSession(detail);
@@ -442,7 +451,7 @@ export default function ChatView() {
           updated[streamIdx] = { ...updated[streamIdx], content: msg.content, format: (msg as any).format === 'markdown' ? 'markdown' : 'text', streaming: false };
           return updated;
         }
-        return [...prev, { id: `reply-${Date.now()}`, role: 'assistant', content: msg.content, format: (msg as any).format === 'markdown' ? 'markdown' : 'text' }];
+        return [...prev, { id: `reply-${Date.now()}`, role: 'assistant', content: msg.content, format: (msg as any).format === 'markdown' ? 'markdown' : 'text', timestamp: new Date().toISOString() }];
       });
       setTyping(false);
       setTaskRunning(false);
@@ -457,7 +466,7 @@ export default function ChatView() {
             updated[idx] = { ...updated[idx], content: stream.full_text, streaming: false };
             return updated;
           }
-          return [...prev, { id: `stream-done-${Date.now()}`, role: 'assistant', content: stream.full_text, format: 'markdown' }];
+          return [...prev, { id: `stream-done-${Date.now()}`, role: 'assistant', content: stream.full_text, format: 'markdown', timestamp: new Date().toISOString() }];
         });
         setTyping(false);
         setTaskRunning(false);
@@ -470,18 +479,18 @@ export default function ChatView() {
             updated[idx] = { ...updated[idx], content: stream.full_text };
             return updated;
           }
-          return [...prev, { id: `stream-${Date.now()}`, role: 'assistant', content: stream.full_text, format: 'markdown', streaming: true }];
+          return [...prev, { id: `stream-${Date.now()}`, role: 'assistant', content: stream.full_text, format: 'markdown', streaming: true, timestamp: new Date().toISOString() }];
         });
       }
     } else if (msg.type === 'card') {
       const card = msg as Extract<BridgeIncoming, { type: 'card' }>;
-      setMessages(prev => [...prev, { id: `card-${Date.now()}`, role: 'assistant', content: '', format: 'card', card: card.card }]);
+      setMessages(prev => [...prev, { id: `card-${Date.now()}`, role: 'assistant', content: '', format: 'card', card: card.card, timestamp: new Date().toISOString() }]);
       setTyping(false);
       setTaskRunning(false);
       setStopping(false);
     } else if (msg.type === 'buttons') {
       const btns = msg as Extract<BridgeIncoming, { type: 'buttons' }>;
-      setMessages(prev => [...prev, { id: `btn-${Date.now()}`, role: 'assistant', content: btns.content, format: 'buttons', buttons: btns.buttons }]);
+      setMessages(prev => [...prev, { id: `btn-${Date.now()}`, role: 'assistant', content: btns.content, format: 'buttons', buttons: btns.buttons, timestamp: new Date().toISOString() }]);
       setTyping(false);
       setTaskRunning(false);
       setStopping(false);
@@ -496,7 +505,7 @@ export default function ChatView() {
       const ps = msg as Extract<BridgeIncoming, { type: 'preview_start' }>;
       const handle = `web-preview-${++previewHandleCounter.current}`;
       sendPreviewAck(ps.ref_id, handle);
-      setMessages(prev => [...prev, { id: `stream-${handle}`, role: 'assistant', content: ps.content, format: 'markdown', streaming: true }]);
+      setMessages(prev => [...prev, { id: `stream-${handle}`, role: 'assistant', content: ps.content, format: 'markdown', streaming: true, timestamp: new Date().toISOString() }]);
     } else if (msg.type === 'update_message') {
       const um = msg as Extract<BridgeIncoming, { type: 'update_message' }>;
       setMessages(prev => {
@@ -571,7 +580,7 @@ export default function ChatView() {
     if (isKnownCmd && !chatCommands.has(cmdToken)) {
       pendingCmdRef.current = cmdToken;
     } else {
-      setMessages(prev => [...prev, { id: `user-${Date.now()}`, role: 'user', content }]);
+      setMessages(prev => [...prev, { id: `user-${Date.now()}`, role: 'user', content, timestamp: new Date().toISOString() }]);
     }
     bridgeSend(content, images);
     setTimeout(() => setSending(false), 300);
@@ -593,6 +602,7 @@ export default function ChatView() {
     setUserPickedSession(false);
     setCurrentSession(null);
     setMessages([]);
+    setExpandedTimestampId(null);
     setInput('');
     setAttachments([]);
     setTyping(false);
@@ -626,7 +636,7 @@ export default function ChatView() {
     }
 
     if (chatCommands.has(cmd.cmd)) {
-      setMessages(prev => [...prev, { id: `user-${Date.now()}`, role: 'user', content: cmd.cmd }]);
+      setMessages(prev => [...prev, { id: `user-${Date.now()}`, role: 'user', content: cmd.cmd, timestamp: new Date().toISOString() }]);
     } else {
       pendingCmdRef.current = cmd.cmd;
     }
@@ -699,6 +709,11 @@ export default function ChatView() {
         {messages.map((msg) => {
           const isUser = msg.role === 'user';
           const isEmpty = !msg.content && !msg.card && !msg.buttons && !msg.imageUrl && !msg.fileName;
+          const timestampExpanded = expandedTimestampId === msg.id;
+          const toggleTimestamp = (event: React.MouseEvent<HTMLDivElement>) => {
+            if ((event.target as HTMLElement).closest('button, a, input, select, textarea')) return;
+            setExpandedTimestampId((id) => id === msg.id ? null : msg.id);
+          };
           return (
             <div key={msg.id} className={cn('flex gap-3', isUser ? 'justify-end' : 'justify-start')}>
               {!isUser && (
@@ -706,34 +721,45 @@ export default function ChatView() {
                   <Bot size={16} className="text-accent" />
                 </div>
               )}
-              <div className={cn(
-                'group/msg relative rounded-2xl px-5 py-3.5 text-sm',
-                isUser
-                  ? 'max-w-[70%] bg-accent text-black rounded-br-md'
-                  : 'max-w-[85%] bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/60 text-gray-900 dark:text-gray-100 rounded-bl-md shadow-sm',
-                msg.streaming && 'animate-pulse-subtle',
-              )}>
-                {isEmpty ? (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">{t('chat.unsupportedMessage', '[Unsupported message]')}</p>
-                ) : msg.format === 'card' ? (
-                  <CardBlock card={msg.card} onAction={handleCardAction} />
-                ) : msg.format === 'buttons' && msg.buttons ? (
-                  <ButtonsBlock content={msg.content} buttons={msg.buttons} onAction={handleCardAction} />
-                ) : msg.format === 'image' && msg.imageUrl ? (
-                  <ImageBlock url={msg.imageUrl} />
-                ) : msg.format === 'file' && msg.fileName ? (
-                  <FileBlock name={msg.fileName} size={msg.fileSize} />
-                ) : isUser ? (
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
-                ) : (
-                  <RenderMarkdown content={msg.content} />
-                )}
-                {msg.streaming && (
-                  <span className="inline-block w-1.5 h-4 bg-accent/60 rounded-sm ml-0.5 animate-pulse" />
-                )}
-                {!isUser && !msg.streaming && msg.content && (
-                  <MsgCopyButton text={msg.content} />
-                )}
+              <div className={cn('cc-message-entry min-w-0', isUser ? 'max-w-[70%]' : 'max-w-[85%]')}>
+                <div
+                  className={cn(
+                    'group/msg relative w-fit max-w-full cursor-pointer rounded-2xl px-5 py-3.5 text-sm',
+                    isUser
+                      ? 'bg-accent text-black rounded-br-md'
+                      : 'bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/60 text-gray-900 dark:text-gray-100 rounded-bl-md shadow-sm',
+                    msg.streaming && 'animate-pulse-subtle',
+                  )}
+                  onClick={toggleTimestamp}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={timestampExpanded}
+                >
+                  {isEmpty ? (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 italic">{t('chat.unsupportedMessage', '[Unsupported message]')}</p>
+                  ) : msg.format === 'card' ? (
+                    <CardBlock card={msg.card} onAction={handleCardAction} />
+                  ) : msg.format === 'buttons' && msg.buttons ? (
+                    <ButtonsBlock content={msg.content} buttons={msg.buttons} onAction={handleCardAction} />
+                  ) : msg.format === 'image' && msg.imageUrl ? (
+                    <ImageBlock url={msg.imageUrl} />
+                  ) : msg.format === 'file' && msg.fileName ? (
+                    <FileBlock name={msg.fileName} size={msg.fileSize} />
+                  ) : isUser ? (
+                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                  ) : (
+                    <RenderMarkdown content={msg.content} />
+                  )}
+                  {msg.streaming && (
+                    <span className="inline-block w-1.5 h-4 bg-accent/60 rounded-sm ml-0.5 animate-pulse" />
+                  )}
+                  {!isUser && !msg.streaming && msg.content && (
+                    <MsgCopyButton text={msg.content} />
+                  )}
+                </div>
+                <time className={cn('cc-message-time block text-[11px] text-gray-400 dark:text-gray-500', timestampExpanded && 'cc-message-time--visible', isUser && 'ml-auto text-right')} dateTime={msg.timestamp}>
+                  {formatFullTimestamp(msg.timestamp)}
+                </time>
               </div>
               {isUser && (
                 <div className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0 mt-1">
