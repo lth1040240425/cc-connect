@@ -126,6 +126,48 @@ html {
     height: calc(100vh - 1.5rem);
   }
 
+  .cc-chat-composer {
+    display: grid;
+    grid-template-columns: 2.5rem 2.5rem minmax(0, 1fr) 2.5rem;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .cc-chat-input-wrap {
+    grid-area: 1 / 1 / 2 / 5;
+    min-width: 0;
+  }
+
+  .cc-chat-command-control {
+    grid-area: 2 / 1;
+  }
+
+  .cc-chat-image-control {
+    grid-area: 2 / 2;
+  }
+
+  .cc-chat-model-control {
+    grid-area: 2 / 3;
+    min-width: 0;
+  }
+
+  .cc-chat-send {
+    grid-area: 2 / 4;
+  }
+
+  .cc-chat-command-control > button,
+  .cc-chat-image-control,
+  .cc-chat-send {
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0.625rem;
+  }
+
+  .cc-chat-model-trigger {
+    width: 100%;
+    padding: 0.625rem 0.5rem;
+  }
+
   .cc-chat-messages .prose,
   .cc-chat-messages .prose p,
   .cc-chat-messages .prose li {

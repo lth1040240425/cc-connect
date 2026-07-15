@@ -729,9 +729,9 @@ export default function ChatView() {
                 ))}
               </div>
             )}
-            <div className="flex items-end gap-2">
+            <div className="cc-chat-composer flex items-end gap-2">
             {/* Command palette trigger */}
-            <div className="relative">
+            <div className="cc-chat-command-control relative">
               <button
                 ref={cmdBtnRef}
                 type="button"
@@ -755,12 +755,12 @@ export default function ChatView() {
             </div>
 
             <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageSelect} />
-            <button type="button" onClick={() => imageInputRef.current?.click()} className="p-3 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06]" title="Add image">
+            <button type="button" onClick={() => imageInputRef.current?.click()} className="cc-chat-image-control p-3 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06]" title="Add image">
               <ImagePlus size={18} />
             </button>
 
             {/* Text input */}
-            <div className="flex-1 relative">
+            <div className="cc-chat-input-wrap flex-1 relative">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -772,11 +772,11 @@ export default function ChatView() {
             </div>
 
             {models.length > 0 && (
-              <div className="relative shrink-0">
+              <div className="cc-chat-model-control relative shrink-0">
                 <button
                   type="button"
                   onClick={() => setModelOpen((open) => !open)}
-                  className="flex w-20 items-center justify-between gap-1 rounded-lg px-2 py-3 text-xs text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                  className="cc-chat-model-trigger flex w-20 items-center justify-between gap-1 rounded-lg px-2 py-3 text-xs text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
                   title={currentModel || 'Model'}
                   aria-label="Select model"
                   aria-expanded={modelOpen}
@@ -809,7 +809,7 @@ export default function ChatView() {
               type="button"
               onClick={handleSend}
               disabled={sending || (!input.trim() && attachments.length === 0)}
-              className="p-3 rounded-xl bg-accent text-black hover:bg-accent-dim transition-colors disabled:opacity-50 flex items-center"
+              className="cc-chat-send p-3 rounded-xl bg-accent text-black hover:bg-accent-dim transition-colors disabled:opacity-50 flex items-center"
             >
               {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
             </button>
