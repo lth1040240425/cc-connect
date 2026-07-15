@@ -2,15 +2,16 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 import {
-  ArrowLeft, Send, User, Bot, Circle, WifiOff,
+  ArrowLeft, Send, User, Bot, Circle, WifiOff, ImagePlus, X,
   Copy, Check, FileText, Image as ImageIcon, Loader2,
   Slash, ChevronDown,
 } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
 import { listSessions, getSession, type Session, type SessionDetail } from '@/api/sessions';
+import { listProjectModels, setProjectModel } from '@/api/projects';
 import {
   useBridgeSocket, fetchBridgeConfig,
-  type BridgeConfig, type BridgeIncoming, type BridgeStatus,
+  type BridgeConfig, type BridgeImage, type BridgeIncoming, type BridgeStatus,
 } from '@/hooks/useBridgeSocket';
 import CommandPalette, { type SlashCommand, slashCommands } from './CommandPalette';
 import SessionDrawer from './SessionDrawer';
@@ -106,6 +107,8 @@ interface ChatMsg {
   streaming?: boolean;
   timestamp?: string;
 }
+
+type PendingImage = BridgeImage & { previewUrl: string };
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -300,6 +303,10 @@ export default function ChatView() {
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState(false);
   const [bridgeCfg, setBridgeCfg] = useState<BridgeConfig | null>(null);
+  const [models, setModels] = useState<string[]>([]);
+  const [currentModel, setCurrentModel] = useState('');
+  const [modelOpen, setModelOpen] = useState(false);
+  const [attachments, setAttachments] = useState<PendingImage[]>([]);
   // Whether the user explicitly picked a session from the drawer
   const [userPickedSession, setUserPickedSession] = useState(false);
 
@@ -311,6 +318,7 @@ export default function ChatView() {
   const messagesEnd = useRef<HTMLDivElement>(null);
   const previewHandleCounter = useRef(0);
   const cmdBtnRef = useRef<HTMLButtonElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const sessionKeyRef = useRef('');
   // Track pending slash command so the next reply can be routed to the panel
   const pendingCmdRef = useRef<string | null>(null);
@@ -330,11 +338,14 @@ export default function ChatView() {
     if (!projectName) return;
     setLoading(true);
     try {
-      const [{ sessions: allSessions }, cfg] = await Promise.all([
+      const [{ sessions: allSessions }, cfg, modelData] = await Promise.all([
         listSessions(projectName),
         fetchBridgeConfig(),
+        listProjectModels(projectName).catch(() => ({ models: [], current: '' })),
       ]);
       setBridgeCfg(cfg);
+      setModels(modelData.models ?? []);
+      setCurrentModel(modelData.current ?? '');
       const sorted = (allSessions || []).sort(
         (a, b) => (b.updated_at || b.created_at || '').localeCompare(a.updated_at || a.created_at || ''),
       );
@@ -504,10 +515,39 @@ export default function ChatView() {
   }, [messages, typing]);
 
   // Send message
+  const handleImageSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []).filter((file) => file.type.startsWith('image/'));
+    files.slice(0, 4).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result ?? '');
+        const [, data = ''] = result.split(',', 2);
+        if (!data) return;
+        setAttachments((items) => [...items, {
+          data,
+          mime_type: file.type,
+          file_name: file.name,
+          previewUrl: result,
+        }].slice(-4));
+      };
+      reader.readAsDataURL(file);
+    });
+    event.target.value = '';
+  }, []);
+
+  const handleModelSelect = useCallback(async (model: string) => {
+    if (!projectName || !model || model === currentModel) return;
+    await setProjectModel(projectName, model);
+    setCurrentModel(model);
+    setModelOpen(false);
+  }, [projectName, currentModel]);
+
   const handleSend = useCallback(() => {
-    if (!input.trim() || bridgeStatus !== 'connected') return;
+    if ((!input.trim() && attachments.length === 0) || bridgeStatus !== 'connected') return;
     const content = input.trim();
+    const images = attachments.map(({ previewUrl: _previewUrl, ...image }) => image);
     setInput('');
+    setAttachments([]);
     setSending(true);
 
     const cmdToken = content.split(' ')[0];
@@ -517,9 +557,9 @@ export default function ChatView() {
     } else {
       setMessages(prev => [...prev, { id: `user-${Date.now()}`, role: 'user', content }]);
     }
-    bridgeSend(content);
+    bridgeSend(content, images);
     setTimeout(() => setSending(false), 300);
-  }, [input, bridgeStatus, bridgeSend]);
+  }, [input, attachments, bridgeStatus, bridgeSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -572,7 +612,7 @@ export default function ChatView() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] animate-fade-in">
+    <div className="cc-chat-view flex flex-col h-[calc(100vh-8rem)] animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
         <div className="flex items-center gap-3">
@@ -676,7 +716,20 @@ export default function ChatView() {
       {/* Input area */}
       <div className="border-t border-gray-200 dark:border-gray-800 pt-3 shrink-0">
         {canSend ? (
-          <div className="relative flex items-end gap-2">
+          <div className="relative space-y-2">
+            {attachments.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto px-1">
+                {attachments.map((image, index) => (
+                  <div key={`${image.file_name}-${index}`} className="relative shrink-0">
+                    <img src={image.previewUrl} alt="" className="h-14 w-14 rounded-lg object-cover border border-gray-200 dark:border-gray-700" />
+                    <button type="button" onClick={() => setAttachments((items) => items.filter((_, itemIndex) => itemIndex !== index))} className="absolute -right-1 -top-1 rounded-full bg-gray-900 p-0.5 text-white" aria-label="Remove image">
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-end gap-2">
             {/* Command palette trigger */}
             <div className="relative">
               <button
@@ -701,6 +754,11 @@ export default function ChatView() {
               />
             </div>
 
+            <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageSelect} />
+            <button type="button" onClick={() => imageInputRef.current?.click()} className="p-3 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06]" title="Add image">
+              <ImagePlus size={18} />
+            </button>
+
             {/* Text input */}
             <div className="flex-1 relative">
               <input
@@ -713,15 +771,29 @@ export default function ChatView() {
               />
             </div>
 
+            {models.length > 0 && (
+              <div className="relative">
+                <button type="button" onClick={() => setModelOpen((open) => !open)} className="max-w-28 truncate px-2 py-3 text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white" title={currentModel}>
+                  {currentModel || 'Model'}
+                </button>
+                {modelOpen && <div className="absolute bottom-full right-0 mb-2 z-30 max-h-56 w-56 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+                  {models.map((model) => <button key={model} type="button" onClick={() => void handleModelSelect(model)} className={cn('block w-full truncate rounded-lg px-3 py-2 text-left text-xs hover:bg-gray-100 dark:hover:bg-gray-800', model === currentModel && 'text-accent')}>
+                    {model}
+                  </button>)}
+                </div>}
+              </div>
+            )}
+
             {/* Send button */}
             <button
               type="button"
               onClick={handleSend}
-              disabled={sending || !input.trim()}
+              disabled={sending || (!input.trim() && attachments.length === 0)}
               className="p-3 rounded-xl bg-accent text-black hover:bg-accent-dim transition-colors disabled:opacity-50 flex items-center"
             >
               {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
             </button>
+            </div>
           </div>
         ) : !bridgeCfg ? (
           <div className="flex items-center gap-2 px-4 py-3 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-xl">

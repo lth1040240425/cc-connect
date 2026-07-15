@@ -42,6 +42,12 @@ function webBridgePlatformName() {
   return `web-${clientId}`;
 }
 
+export type BridgeImage = {
+  data: string;
+  mime_type: string;
+  file_name: string;
+};
+
 export function useBridgeSocket({ bridgeCfg, platformName, sessionKey, projectName, onMessage }: UseBridgeSocketOptions) {
   const platformNameRef = useRef(platformName || webBridgePlatformName());
   const registeredPlatform = platformNameRef.current;
@@ -57,7 +63,7 @@ export function useBridgeSocket({ bridgeCfg, platformName, sessionKey, projectNa
     }
   }, []);
 
-  const sendMessage = useCallback((content: string) => {
+  const sendMessage = useCallback((content: string, images: BridgeImage[] = []) => {
     send({
       type: 'message',
       msg_id: `web-${Date.now()}`,
@@ -65,6 +71,7 @@ export function useBridgeSocket({ bridgeCfg, platformName, sessionKey, projectNa
       user_id: 'web-admin',
       user_name: 'Web Admin',
       content,
+      images,
       reply_ctx: sessionKey,
       project: projectName || '',
     });

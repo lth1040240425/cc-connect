@@ -59,6 +59,8 @@ export const listAgentTypes = () => api.get<{ agents: string[]; platforms: strin
 export const listProjects = () => api.get<{ projects: ProjectSummary[] }>('/projects');
 export const getProject = (name: string) => api.get<ProjectDetail>(`/projects/${name}`);
 export const updateProject = (name: string, body: ProjectSettingsUpdate) => api.patch(`/projects/${name}`, body);
+export const listProjectModels = (name: string) => api.get<{ models: string[]; current: string }>(`/projects/${name}/models`);
+export const setProjectModel = (name: string, model: string) => api.post<{ model: string }>(`/projects/${name}/model`, { model });
 
 export const addPlatformToProject = (projectName: string, body: {
   type: string; options: Record<string, any>; work_dir?: string; agent_type?: string;

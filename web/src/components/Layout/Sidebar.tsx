@@ -31,6 +31,7 @@ export default function Sidebar() {
   return (
     <aside
       className={cn(
+        'cc-sidebar',
         'h-screen flex flex-col border-r transition-all duration-300 ease-out',
         'bg-white/75 backdrop-blur-xl border-gray-200/80',
         'dark:bg-[rgba(0,0,0,0.85)] dark:backdrop-blur-xl dark:border-white/[0.08]',
