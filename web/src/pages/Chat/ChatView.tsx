@@ -772,14 +772,34 @@ export default function ChatView() {
             </div>
 
             {models.length > 0 && (
-              <div className="relative">
-                <button type="button" onClick={() => setModelOpen((open) => !open)} className="max-w-28 truncate px-2 py-3 text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white" title={currentModel}>
-                  {currentModel || 'Model'}
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setModelOpen((open) => !open)}
+                  className="flex w-20 items-center justify-between gap-1 rounded-lg px-2 py-3 text-xs text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                  title={currentModel || 'Model'}
+                  aria-label="Select model"
+                  aria-expanded={modelOpen}
+                >
+                  <span className="min-w-0 truncate">{currentModel || 'Model'}</span>
+                  <ChevronDown size={14} className={cn('shrink-0 transition-transform', modelOpen && 'rotate-180')} />
                 </button>
-                {modelOpen && <div className="absolute bottom-full right-0 mb-2 z-30 max-h-56 w-56 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-700 dark:bg-gray-900">
-                  {models.map((model) => <button key={model} type="button" onClick={() => void handleModelSelect(model)} className={cn('block w-full truncate rounded-lg px-3 py-2 text-left text-xs hover:bg-gray-100 dark:hover:bg-gray-800', model === currentModel && 'text-accent')}>
-                    {model}
-                  </button>)}
+                {modelOpen && <div className="absolute bottom-full right-0 z-30 mb-2 max-h-64 w-60 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+                  {models.map((model) => (
+                    <button
+                      key={model}
+                      type="button"
+                      onClick={() => void handleModelSelect(model)}
+                      className={cn(
+                        'flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800',
+                        model === currentModel && 'bg-accent/15 font-medium text-accent hover:bg-accent/20',
+                      )}
+                      title={model}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{model}</span>
+                      {model === currentModel && <Check size={15} className="shrink-0" aria-label="Selected" />}
+                    </button>
+                  ))}
                 </div>}
               </div>
             )}
