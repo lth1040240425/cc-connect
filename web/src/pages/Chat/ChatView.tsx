@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 import {
-  ArrowLeft, Send, User, Bot, Circle, WifiOff, ImagePlus, X,
+  ArrowLeft, Send, User, Bot, Circle, WifiOff, ImagePlus, X, MessageSquarePlus, Square,
   Copy, Check, FileText, Image as ImageIcon, Loader2,
   Slash, ChevronDown,
 } from 'lucide-react';
@@ -300,6 +300,8 @@ export default function ChatView() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [taskRunning, setTaskRunning] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState(false);
   const [bridgeCfg, setBridgeCfg] = useState<BridgeConfig | null>(null);
@@ -427,6 +429,8 @@ export default function ChatView() {
         setCmdResult({ command: pending, content: reply.content, format: 'markdown' });
       }
       setTyping(false);
+      setTaskRunning(false);
+      setStopping(false);
       return;
     }
 
@@ -441,6 +445,8 @@ export default function ChatView() {
         return [...prev, { id: `reply-${Date.now()}`, role: 'assistant', content: msg.content, format: (msg as any).format === 'markdown' ? 'markdown' : 'text' }];
       });
       setTyping(false);
+      setTaskRunning(false);
+      setStopping(false);
     } else if (msg.type === 'reply_stream') {
       const stream = msg as Extract<BridgeIncoming, { type: 'reply_stream' }>;
       if (stream.done) {
@@ -454,6 +460,8 @@ export default function ChatView() {
           return [...prev, { id: `stream-done-${Date.now()}`, role: 'assistant', content: stream.full_text, format: 'markdown' }];
         });
         setTyping(false);
+        setTaskRunning(false);
+        setStopping(false);
       } else {
         setMessages(prev => {
           const idx = prev.findIndex(m => m.streaming);
@@ -469,14 +477,21 @@ export default function ChatView() {
       const card = msg as Extract<BridgeIncoming, { type: 'card' }>;
       setMessages(prev => [...prev, { id: `card-${Date.now()}`, role: 'assistant', content: '', format: 'card', card: card.card }]);
       setTyping(false);
+      setTaskRunning(false);
+      setStopping(false);
     } else if (msg.type === 'buttons') {
       const btns = msg as Extract<BridgeIncoming, { type: 'buttons' }>;
       setMessages(prev => [...prev, { id: `btn-${Date.now()}`, role: 'assistant', content: btns.content, format: 'buttons', buttons: btns.buttons }]);
       setTyping(false);
+      setTaskRunning(false);
+      setStopping(false);
     } else if (msg.type === 'typing_start') {
       setTyping(true);
+      setTaskRunning(true);
     } else if (msg.type === 'typing_stop') {
       setTyping(false);
+      setTaskRunning(false);
+      setStopping(false);
     } else if (msg.type === 'preview_start') {
       const ps = msg as Extract<BridgeIncoming, { type: 'preview_start' }>;
       const handle = `web-preview-${++previewHandleCounter.current}`;
@@ -549,6 +564,7 @@ export default function ChatView() {
     setInput('');
     setAttachments([]);
     setSending(true);
+    setTaskRunning(true);
 
     const cmdToken = content.split(' ')[0];
     const isKnownCmd = knownCommands.has(cmdToken);
@@ -572,6 +588,26 @@ export default function ChatView() {
     }
   };
 
+  const startNewSession = useCallback(() => {
+    if (bridgeStatus !== 'connected') return;
+    setUserPickedSession(false);
+    setCurrentSession(null);
+    setMessages([]);
+    setInput('');
+    setAttachments([]);
+    setTyping(false);
+    setTaskRunning(false);
+    setStopping(false);
+    bridgeSend('/new');
+    setDrawerOpen(false);
+  }, [bridgeStatus, bridgeSend]);
+
+  const handleStop = useCallback(() => {
+    if (bridgeStatus !== 'connected' || !taskRunning || stopping) return;
+    setStopping(true);
+    bridgeSend('/stop');
+  }, [bridgeStatus, bridgeSend, stopping, taskRunning]);
+
   // Commands whose result should go to the message stream (they change state)
   const chatCommands = new Set(['/new', '/stop', '/switch', '/delete-mode', '/upgrade']);
   const knownCommands = new Set(slashCommands.map(c => c.cmd));
@@ -580,13 +616,22 @@ export default function ChatView() {
     setCmdOpen(false);
     if (bridgeStatus !== 'connected') return;
 
+    if (cmd.cmd === '/new') {
+      startNewSession();
+      return;
+    }
+    if (cmd.cmd === '/stop') {
+      handleStop();
+      return;
+    }
+
     if (chatCommands.has(cmd.cmd)) {
       setMessages(prev => [...prev, { id: `user-${Date.now()}`, role: 'user', content: cmd.cmd }]);
     } else {
       pendingCmdRef.current = cmd.cmd;
     }
     bridgeSend(cmd.cmd);
-  }, [bridgeStatus, bridgeSend]);
+  }, [bridgeStatus, bridgeSend, handleStop, startNewSession]);
 
   const handleCardAction = useCallback((value: string) => {
     if (bridgeStatus !== 'connected') return;
@@ -597,14 +642,6 @@ export default function ChatView() {
     sendCardAction(value);
   }, [bridgeStatus, sendCardAction]);
 
-  const handleNewSession = useCallback(() => {
-    if (bridgeStatus !== 'connected') return;
-    setUserPickedSession(false);
-    setMessages(prev => [...prev, { id: `user-${Date.now()}`, role: 'user', content: '/new' }]);
-    bridgeSend('/new');
-    setDrawerOpen(false);
-  }, [bridgeStatus, bridgeSend]);
-
   const canSend = bridgeStatus === 'connected';
 
   if (loading && !currentSession && sessions.length === 0) {
@@ -614,7 +651,7 @@ export default function ChatView() {
   return (
     <div className="cc-chat-view flex flex-col h-[calc(100vh-8rem)] animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
+      <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
         <div className="flex items-center gap-3">
           <Link to="/chat" className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
             <ArrowLeft size={18} className="text-gray-400" />
@@ -636,6 +673,16 @@ export default function ChatView() {
             </button>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={startNewSession}
+          disabled={!canSend}
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
+          title="新建会话"
+        >
+          <MessageSquarePlus size={16} />
+          <span>新会话</span>
+        </button>
       </div>
 
       {/* Messages */}
@@ -807,11 +854,12 @@ export default function ChatView() {
             {/* Send button */}
             <button
               type="button"
-              onClick={handleSend}
-              disabled={sending || (!input.trim() && attachments.length === 0)}
+              onClick={taskRunning ? handleStop : handleSend}
+              disabled={stopping || (!taskRunning && (sending || (!input.trim() && attachments.length === 0)))}
               className="cc-chat-send p-3 rounded-xl bg-accent text-black hover:bg-accent-dim transition-colors disabled:opacity-50 flex items-center"
+              title={taskRunning ? '停止当前任务' : '发送消息'}
             >
-              {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+              {stopping ? <Loader2 size={18} className="animate-spin" /> : taskRunning ? <Square size={17} fill="currentColor" /> : <Send size={18} />}
             </button>
             </div>
           </div>
@@ -840,7 +888,7 @@ export default function ChatView() {
         sessions={sessions}
         currentSessionId={currentSession?.id || ''}
         onSelect={switchToSession}
-        onNewSession={handleNewSession}
+        onNewSession={startNewSession}
       />
 
       {/* Command result panel */}
